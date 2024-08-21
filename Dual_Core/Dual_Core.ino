@@ -9,11 +9,11 @@
 *  Change these pins on the ESP32
 */
 #define DIR_PIN 5
-#define STEP_PIN 10
-#define ENABLE_PIN 9
+#define STEP_PIN 9
+#define ENABLE_PIN 10
 #define RXD2 19  // Set your RX pin on the ESP32
-#define TXD2 22  // Set your TX pin on the ESP32
-#define STALLGUARD 23
+#define TXD2 20  // Set your TX pin on the ESP32
+#define STALLGUARD 21
 #define R_SENSE 0.12f        // R_SENSE for current calc.
 #define DRIVER_ADDRESS 0b00  // TMC2209 Driver address according to MS1 and MS2
 
