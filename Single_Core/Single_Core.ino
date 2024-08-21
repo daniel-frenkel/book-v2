@@ -4,8 +4,6 @@
 
 #include <TMCStepper.h>
 
-#include <FastAccelStepper.h>
-
 /* STEP PIN SETUP:
 *  Change these pins on the ESP32
 */
@@ -15,48 +13,48 @@
 #define RXD2 19  // Set your RX pin on the ESP32
 #define TXD2 22  // Set your TX pin on the ESP32
 #define STALLGUARD 23
+#define INDEX 2
 #define R_SENSE 0.12f        // R_SENSE for current calc.
 #define DRIVER_ADDRESS 0b00  // TMC2209 Driver address according to MS1 and MS2
 
 //Change these values to get different results
-int32_t  move_to_step = 3200;  //Change this value to set the position to move to (Negative will reverse)
+int32_t move_to_step = 3200;  //Change this value to set the position to move to (Negative will reverse)
 
-  // ## Speed
-  // Sets the speed in microsteps per second. 
-  // If for example the the motor_microsteps is set to 16 and your stepper motor has 200 full steps per revolution (Most common type. The motor angle will be 1.8 degrees on the datasheet)
-  // It means 200 x 16 = 3200 steps per revolution. To set the speed to rotate one revolution per seconds, we would set the value below to 3200.
-int32_t  set_velocity = 3200;
+// ## Speed
+// Sets the speed in microsteps per second.
+// If for example the the motor_microsteps is set to 16 and your stepper motor has 200 full steps per revolution (Most common type. The motor angle will be 1.8 degrees on the datasheet)
+// It means 200 x 16 = 3200 steps per revolution. To set the speed to rotate one revolution per seconds, we would set the value below to 3200.
+int32_t set_velocity = 3200;
 
-  // ## Acceleration
-  //  setAcceleration() expects as parameter the change of speed
-  //  as step/s².
-  //  If for example the speed should ramp up from 0 to 10000 steps/s within
-  //  10s, then the acceleration is 10000 steps/s / 10s = 1000 steps/s²
-  //
-  // New value will be used after call to
-  // move/moveTo/runForward/runBackward/applySpeedAcceleration/moveByAcceleration
-  //
-  // note: no update on stopMove()
-  //
-  // Returns 0 on success, or -1 on invalid value (<=0)
-
-int32_t  set_accel = 3200*100; //Fast acceleration
-int32_t  set_current = 300;
+// ## Acceleration
+//  setAcceleration() expects as parameter the change of speed
+//  as step/s².
+//  If for example the speed should ramp up from 0 to 10000 steps/s within
+//  10s, then the acceleration is 10000 steps/s / 10s = 1000 steps/s²
+//
+// New value will be used after call to
+// move/moveTo/runForward/runBackward/applySpeedAcceleration/moveByAcceleration
+//
+// note: no update on stopMove()
+//
+// Returns 0 on success, or -1 on invalid value (<=0)
+int32_t set_accel = 3200 * 100;  //Fast acceleration
+int32_t set_current = 300;
 
 // IF StallGuard does not work, it's because these two values are not set correctly or your pins are not correct.
-int32_t  set_stall = 80;     //Do not set the value too high or the TMC will not detect it. Start low and work your way up.
-int32_t  set_tcools = 285;  // Set slightly higher than the max TSTEP value you see
+int32_t set_stall = 80;    //Do not set the value too high or the TMC will not detect it. Start low and work your way up.
+int32_t set_tcools = 285;  // Set slightly higher than the max TSTEP value you see
+uint16_t motor_microsteps = 16;
+
 
 bool stalled_motor = false;
 bool motor_moving = false;
-uint16_t  motor_microsteps = 16;
+book isRunning = false;
 
 // We communicate with the TMC2209 over UART
 // But the Arduino UNO only have one Serial port which is connected to the Serial Monitor
 // We can use software serial on the UNO, and hardware serial on the ESP32 or Mega 2560
 
-FastAccelStepperEngine engine = FastAccelStepperEngine();
-FastAccelStepper *stepper = NULL;
 TMC2209Stepper driver(&Serial1, R_SENSE, DRIVER_ADDRESS);
 
 // Interrupt
@@ -65,6 +63,21 @@ TMC2209Stepper driver(&Serial1, R_SENSE, DRIVER_ADDRESS);
 void IRAM_ATTR stalled_position() {
   stalled_motor = true;
 }
+
+void IRAM_ATTR index_interrupt() {
+  // Track the position of the motor here
+
+    if (is_closing)
+    {
+        instance->tmc_steps++;
+    }
+    else
+    {
+        instance->tmc_steps--;
+    }
+}
+
+
 
 void setup() {
   Serial.begin(115200);
@@ -91,41 +104,16 @@ void setup() {
   driver.SGTHRS(set_stall);
   driver.TCOOLTHRS(set_tcools);
 
-  engine.init();
-  stepper = engine.stepperConnectToPin(STEP_PIN);
-  stepper->setDirectionPin(DIR_PIN);
-  stepper->setEnablePin(ENABLE_PIN);
-  stepper->setAutoEnable(true);
-  stepper->setSpeedInHz(set_velocity);
-  stepper->setAcceleration(set_accel);
-
-  // Set the current position of the stepper - either in standstill or while
-  // moving.
-  //    for esp32: the implementation uses getCurrentPosition(), which does not
-  //               consider the steps of the current command
-  //               => recommend to use only in standstill
-  stepper->setCurrentPosition(0);
-
-  // Now set up tasks to run independently.
-  xTaskCreatePinnedToCore(
-    MotorTask  //Motor Task
-    , "MotorTask"  // A name just for humans
-    , 1024 * 4  // This stack size can be checked & adjusted by reading the Stack Highwater
-    , NULL
-    , 3  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
-    , NULL
-    , 0
-    );
 }
 
 
 void loop() {
   // Add your Wi-Fi code here if required. The motor control will be done in the other task and core.
 
-  while (stepper->isRunning() == true) {
+  if (isRunning == true) {
 
-    // ## STEP 1: Uncomment this line below and obtain the value from the serial monitor. 
-    // Multiply this obtained value by 1.2 and set the variable "set_tcools" to this value on line 29    
+    // ## STEP 1: Uncomment this line below and obtain the value from the serial monitor.
+    // Multiply this obtained value by 1.2 and set the variable "set_tcools" to this value on line 29
     // Serial.println(driver.TSTEP());
     // Now comment the line above
 
@@ -134,50 +122,43 @@ void loop() {
     // If the value is averaging 260, then a SGTHRS value of 260/2 (130) will trigger the stall.
     // We want a SGTHRS value that's much smaller as to not trigger a stall unintentioally. A value of 80 is ok becuase it means the SG_RESULT must drop to 160 (80x2) before a stall is triggered.
     // Update the "set_stall" variable on line 28 with your desired value.
-    
+
     // ## Monitor the position if desired
     //Serial.println(stepper->getCurrentPosition());
 
     // The motor should now stop automatically when a stall occurs, delay for 2 seconds, then spin in the opposite direction.
 
-    delay(50);
   }
-}
-
-void MotorTask(void *pvParameters) {
-  for (;;) {
 
     stalled_motor = false;          // We'll set the stall flag to false, in case it was triggered easlier.
-    stepper->moveTo(move_to_step);  // We tell the motor to move to a spcific position.
+    driver.VACTUAL(move_to_step);  // We tell the motor to move to a spcific position.
 
-    while (stepper->isRunning() == true)
-    {
+    while (stepper->isRunning() == true) {
       if (stalled_motor == true) {
         stepper->forceStop();
         Serial.println("Stalled");
-        delay(2000); // Delay for testing
-        break; // Break from the while loop
+        delay(2000);  // Delay for testing
+        break;        // Break from the while loop
       }
-      delay(1); // We need to kill some time while the motor moves
+      delay(1);  // We need to kill some time while the motor moves
     }
-    
-    delay(3000); // Delay 3 seconds for testing
+
+    delay(3000);  // Delay 3 seconds for testing
 
     stalled_motor = false;
-    stepper->moveTo(0); // Move to position 0
+    stepper->moveTo(0);  // Move to position 0
 
-    while (stepper->isRunning() == true) // isRunning() is true while the stepper is moving to position. We can use this time to wait for a stall
+    while (stepper->isRunning() == true)  // isRunning() is true while the stepper is moving to position. We can use this time to wait for a stall
     {
       if (stalled_motor == true) {
         stepper->forceStop();
         Serial.println("Stalled");
-        delay(2000); // Delay for testing
-        break; // Break from the while loop
+        delay(2000);  // Delay for testing
+        break;        // Break from the while loop
       }
-      delay(1); // We need to kill some time while the motor moves
+      delay(1);  // We need to kill some time while the motor moves
     }
 
-    delay(3000); // Delay 3 seconds for testing
-    
+    delay(3000);  // Delay 3 seconds for testing
   }
-}
+
