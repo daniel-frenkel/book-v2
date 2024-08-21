@@ -10,12 +10,14 @@
 #define DIR_PIN 5
 #define STEP_PIN 10
 #define ENABLE_PIN 9
-#define RXD2 19  // Set your RX pin on the ESP32
-#define TXD2 22  // Set your TX pin on the ESP32
-#define STALLGUARD 23
-#define INDEX 2
-#define R_SENSE 0.12f        // R_SENSE for current calc.
-#define DRIVER_ADDRESS 0b00  // TMC2209 Driver address according to MS1 and MS2
+#define RX_PIN 19  // Set your RX pin on the ESP32
+#define TX_PIN 22  // Set your TX pin on the ESP32
+#define STALLGUARD_PIN 23
+#define INDE_PIN 2
+#define R_SENSE 0.12f     // R_SENSE for current calc.
+#define DRIVER_ADDRESS 0  // TMC2209 Driver address according to MS1 and MS2
+
+#define MOVE_VELOCITY 5000  // Sets the speed the motor will run
 
 //Change these values to get different results
 int32_t move_to_step = 3200;  //Change this value to set the position to move to (Negative will reverse)
@@ -45,11 +47,12 @@ int32_t set_current = 300;
 int32_t set_stall = 80;    //Do not set the value too high or the TMC will not detect it. Start low and work your way up.
 int32_t set_tcools = 285;  // Set slightly higher than the max TSTEP value you see
 uint16_t motor_microsteps = 16;
-
+int32_t tmc_steps = 0;
 
 bool stalled_motor = false;
 bool motor_moving = false;
-book isRunning = false;
+bool isRunning = false;
+bool isClosing = false;
 
 // We communicate with the TMC2209 over UART
 // But the Arduino UNO only have one Serial port which is connected to the Serial Monitor
@@ -64,28 +67,29 @@ void IRAM_ATTR stalled_position() {
   stalled_motor = true;
 }
 
+// ## Track Steps
+// When using the pulse generator, the TMC2209 will tell us each time a step has been taken by pulsing the INDEX pin. We can create a tracker to add or subract steps from the tracker
+// The isClosing variable keeps track of which direction the motor is spinning, this way we know whether eto add or subract from the position.
 void IRAM_ATTR index_interrupt() {
   // Track the position of the motor here
 
-    if (is_closing)
-    {
-        instance->tmc_steps++;
-    }
-    else
-    {
-        instance->tmc_steps--;
-    }
+  if (isClosing == true) {
+    tmc_steps++;
+  } else {
+    tmc_steps--;
+  }
 }
-
-
 
 void setup() {
   Serial.begin(115200);
-  Serial1.begin(115200, SERIAL_8N1, RXD2, TXD2);  // ESP32 can use any pins to Serial
+  Serial1.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);  // ESP32 can use any pins to Serial
 
   pinMode(ENABLE_PIN, OUTPUT);
-  pinMode(STALLGUARD, INPUT);
-  attachInterrupt(digitalPinToInterrupt(STALLGUARD), stalled_position, RISING);
+  pinMode(STALLGUARD_PIN, INPUT);
+  pinMode(INDEX_PIN, INPUT);
+
+  attachInterrupt(digitalPinToInterrupt(STALLGUARD_PIN), stalled_position, RISING);
+  attachInterrupt(digitalPinToInterrupt(INDEX_PIN), index_interrupt, RISING);
 
   driver.begin();                       // Start all the UART communications functions behind the scenes
   driver.toff(4);                       //For operation with StealthChop, this parameter is not used, but it is required to enable the motor. In case of operation with StealthChop only, any setting is OK
@@ -103,7 +107,6 @@ void setup() {
   driver.rms_current(set_current);
   driver.SGTHRS(set_stall);
   driver.TCOOLTHRS(set_tcools);
-
 }
 
 
@@ -127,38 +130,25 @@ void loop() {
     //Serial.println(stepper->getCurrentPosition());
 
     // The motor should now stop automatically when a stall occurs, delay for 2 seconds, then spin in the opposite direction.
-
   }
 
-    stalled_motor = false;          // We'll set the stall flag to false, in case it was triggered easlier.
-    driver.VACTUAL(move_to_step);  // We tell the motor to move to a spcific position.
+  // The built in pulse generator cannot accelerate. To accelerate, create a for loop that starts at 0 velocity, and increases it's speed until the MOVE_VELOCITY speed is reached
 
-    while (stepper->isRunning() == true) {
-      if (stalled_motor == true) {
-        stepper->forceStop();
-        Serial.println("Stalled");
-        delay(2000);  // Delay for testing
-        break;        // Break from the while loop
-      }
-      delay(1);  // We need to kill some time while the motor moves
-    }
-
-    delay(3000);  // Delay 3 seconds for testing
-
-    stalled_motor = false;
-    stepper->moveTo(0);  // Move to position 0
-
-    while (stepper->isRunning() == true)  // isRunning() is true while the stepper is moving to position. We can use this time to wait for a stall
-    {
-      if (stalled_motor == true) {
-        stepper->forceStop();
-        Serial.println("Stalled");
-        delay(2000);  // Delay for testing
-        break;        // Break from the while loop
-      }
-      delay(1);  // We need to kill some time while the motor moves
-    }
-
-    delay(3000);  // Delay 3 seconds for testing
+  for (int i = 0; i < MOVE_VELOCITY; i = i + 100) {
+    driver.VACTUAL(i);
   }
 
+  driver.VACTUAL(MOVE_VELOCITY);  // We tell the motor to move to a spcific position.
+  isRunning = true;
+
+  if (isRunning() == true) {
+    if (stalled_motor == true) {
+      driver.VACTUAL(0);
+      Serial.println("Stalled");
+      stalled_motor = false;  // We'll set the stall flag to false, in case it was triggered easlier.
+      delay(2000);            // Delay for testing
+      break;                  // Break from the while loop
+    }
+    delay(1);  // We need to kill some time while the motor moves
+  }
+}

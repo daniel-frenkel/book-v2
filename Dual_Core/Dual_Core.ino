@@ -2,20 +2,24 @@
 // The FastAccelStepper library is BROKEN with version 3.0 of the esp32 core. 
 // Open up the board manager and revert to version 2.0.17
 
+// Please always refer to the TMC2209 datasheet found here: https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
+
+// ## TMCStepper Library
+// For documentation go here: https://teemuatlut.github.io/TMCStepper/class_t_m_c2209_stepper.html
 #include <TMCStepper.h>
+
+// ## FastAccelStepper Library
+// Documentation can be found in the header file here: https://github.com/gin66/FastAccelStepper/blob/master/src/FastAccelStepper.h
 #include <FastAccelStepper.h>
 
 // ## STEP PIN SETUP:
 // Change these pins on the ESP32
-
 #define DIR_PIN 5
 #define STEP_PIN 9
 #define ENABLE_PIN 10
-#define RXD2 19  // Set your RX pin on the ESP32
-#define TXD2 20  // Set your TX pin on the ESP32
-#define STALLGUARD 21
-#define R_SENSE 0.12f        // R_SENSE for current calc.
-#define DRIVER_ADDRESS 0b00  // TMC2209 Driver address according to MS1 and MS2
+#define RX_PIN 19
+#define TX_PIN 20
+#define STALLGUARD_PIN 21
 
 // ## Position
 // Change these values to set the maximum step position.
@@ -63,7 +67,7 @@ bool motor_moving = false;
 
 FastAccelStepperEngine engine = FastAccelStepperEngine();
 FastAccelStepper *stepper = NULL;
-TMC2209Stepper driver(&Serial1, R_SENSE, DRIVER_ADDRESS);
+TMC2209Stepper driver(&Serial1, 0.12f, 0);
 
 // ## Interrupt
 // This interrupt will fire when a HIGH rising signal is detected on the DIAG pin. This indicates a stall.
@@ -73,11 +77,11 @@ void IRAM_ATTR stalled_position() {
 
 void setup() {
   Serial.begin(115200);
-  Serial1.begin(115200, SERIAL_8N1, RXD2, TXD2);  // ESP32 can use any pins to Serial
+  Serial1.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);  // ESP32 can use any pins to Serial
 
   pinMode(ENABLE_PIN, OUTPUT);
-  pinMode(STALLGUARD, INPUT);
-  attachInterrupt(digitalPinToInterrupt(STALLGUARD), stalled_position, RISING);
+  pinMode(STALLGUARD_PIN, INPUT);
+  attachInterrupt(digitalPinToInterrupt(STALLGUARD_PIN), stalled_position, RISING);
 
   driver.begin();                       // Start all the UART communications functions behind the scenes
   driver.toff(4);                       //For operation with StealthChop, this parameter is not used, but it is required to enable the motor. In case of operation with StealthChop only, any setting is OK
@@ -100,30 +104,20 @@ void setup() {
   stepper = engine.stepperConnectToPin(STEP_PIN);
   stepper->setDirectionPin(DIR_PIN);
   stepper->setEnablePin(ENABLE_PIN);
-  stepper->setAutoEnable(true);
+  stepper->setAutoEnable(true); // This sets the enable pin and turns the TMC2209 on/off atomatically
   stepper->setSpeedInHz(set_velocity);
   stepper->setAcceleration(set_accel);
-
-  // Set the current position of the stepper - either in standstill or while
-  // moving.
-  //    for esp32: the implementation uses getCurrentPosition(), which does not
-  //               consider the steps of the current command
-  //               => recommend to use only in standstill
-  stepper->setCurrentPosition(0);
 
   // Now set up tasks to run independently.
   xTaskCreatePinnedToCore(
     MotorTask  //Motor Task
-    ,
-    "MotorTask"  // A name just for humans
-    ,
-    1024 * 4  // This stack size can be checked & adjusted by reading the Stack Highwater
-    ,
-    NULL, 3  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
-    ,
-    NULL , 0);
+    ,"MotorTask"  // A name just for humans
+    ,1024 * 4  // This stack size can be checked & adjusted by reading the Stack Highwater
+    ,NULL
+    ,3  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    ,NULL
+    ,0);
 }
-
 
 void loop() {
   // Add your Wi-Fi code here if required. The motor control will be done in the other task and core.
@@ -151,15 +145,18 @@ void loop() {
 }
 
 void MotorTask(void *pvParameters) {
-  for (;;) {
 
-    stalled_motor = false;          // We'll set the stall flag to false, in case it was triggered easlier.
-    stepper->moveTo(move_to_step);  // We tell the motor to move to a spcific position.
+  stepper->setCurrentPosition(0);
+
+  while(true) {
+
+    stepper->moveTo(move_to_step);  // We tell the motor to move to a specific position. Use move() to move a certain distance rather than to a position.
 
     while (stepper->isRunning() == true) {
       if (stalled_motor == true) {
         stepper->forceStop();
         Serial.println("Stalled");
+        stalled_motor = false; // We'll set the stall flag to false, so it does not trigger this again
         delay(2000);  // Delay for testing
         break;        // Break from the while loop
       }
@@ -168,7 +165,6 @@ void MotorTask(void *pvParameters) {
 
     delay(3000);  // Delay 3 seconds for testing
 
-    stalled_motor = false;
     stepper->moveTo(0);  // Move to position 0
 
     while (stepper->isRunning() == true)  // isRunning() is true while the stepper is moving to position. We can use this time to wait for a stall
@@ -176,6 +172,7 @@ void MotorTask(void *pvParameters) {
       if (stalled_motor == true) {
         stepper->forceStop();
         Serial.println("Stalled");
+        stalled_motor = false; // We'll set the stall flag to false, so it does not trigger this again
         delay(2000);  // Delay for testing
         break;        // Break from the while loop
       }
