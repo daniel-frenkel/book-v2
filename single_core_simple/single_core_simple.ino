@@ -1,5 +1,6 @@
-/* WARNING: The FastAccelStepper library is BROKEN with version 3.0 of the esp32 core. Open up the board manager and revert to version 2.0.17
- * 
+/* WARNING:
+ 1) The FastAccelStepper library is BROKEN with version 3.0 of the esp32 core. Open up the board manager and revert to version 2.0.17
+ 2) There is also an issue where the INDEX pin is not outputting the correct number of steps. I've yet to figure out why my logic is wrong here.
  */
 
 #include <TMCStepper.h>
@@ -13,20 +14,30 @@
 #define RX_PIN 19  // Set your RX pin on the ESP32
 #define TX_PIN 22  // Set your TX pin on the ESP32
 #define STALLGUARD_PIN 23
-#define INDE_PIN 2
+
+#define INDEX_PIN 2
+
 #define R_SENSE 0.12f     // R_SENSE for current calc.
 #define DRIVER_ADDRESS 0  // TMC2209 Driver address according to MS1 and MS2
 
-#define MOVE_VELOCITY 5000  // Sets the speed the motor will run
+
+int32_t MOVE_VELOCITY = 200;  // Sets the speed the motor will run
+int32_t vactual_velocity = MOVE_VELOCITY / 0.715f;
+
+// µstep velocity v[Hz] = VACTUAL[2209] * 0.715Hz
 
 //Change these values to get different results
-int32_t move_to_step = 3200;  //Change this value to set the position to move to (Negative will reverse)
+// ## Position
+// Set the position in STEPS that you want to run to
+int32_t move_to_step = 200 * 1;  //Change this value to set the position to move to (Negative will reverse)
 
+// This modifies the above position to work correcttly with the INDEX pin, because the index output gives one pulse per electrical rotation, i.e., one pulse per each four fullsteps
+int32_t move_to = move_to_step / 2;
 // ## Speed
 // Sets the speed in microsteps per second.
 // If for example the the motor_microsteps is set to 16 and your stepper motor has 200 full steps per revolution (Most common type. The motor angle will be 1.8 degrees on the datasheet)
 // It means 200 x 16 = 3200 steps per revolution. To set the speed to rotate one revolution per seconds, we would set the value below to 3200.
-int32_t set_velocity = 3200;
+int32_t set_velocity = 200;
 
 // ## Acceleration
 //  setAcceleration() expects as parameter the change of speed
@@ -40,19 +51,18 @@ int32_t set_velocity = 3200;
 // note: no update on stopMove()
 //
 // Returns 0 on success, or -1 on invalid value (<=0)
-int32_t set_accel = 3200 * 100;  //Fast acceleration
 int32_t set_current = 300;
 
 // IF StallGuard does not work, it's because these two values are not set correctly or your pins are not correct.
-int32_t set_stall = 80;    //Do not set the value too high or the TMC will not detect it. Start low and work your way up.
-int32_t set_tcools = 285;  // Set slightly higher than the max TSTEP value you see
-uint16_t motor_microsteps = 16;
+int32_t set_stall = 80;         //Do not set the value too high or the TMC will not detect it. Start low and work your way up.
+int32_t set_tcools = 285;       // Set slightly higher than the max TSTEP value you see
+uint16_t motor_microsteps = 0;  //0
 int32_t tmc_steps = 0;
 
 bool stalled_motor = false;
 bool motor_moving = false;
 bool isRunning = false;
-bool isClosing = false;
+bool move_to_max = false;
 
 // We communicate with the TMC2209 over UART
 // But the Arduino UNO only have one Serial port which is connected to the Serial Monitor
@@ -69,11 +79,13 @@ void IRAM_ATTR stalled_position() {
 
 // ## Track Steps
 // When using the pulse generator, the TMC2209 will tell us each time a step has been taken by pulsing the INDEX pin. We can create a tracker to add or subract steps from the tracker
+// The index output gives one pulse per electrical rotation, i.e., one pulse per each four fullsteps. I
 // The isClosing variable keeps track of which direction the motor is spinning, this way we know whether eto add or subract from the position.
+
 void IRAM_ATTR index_interrupt() {
   // Track the position of the motor here
 
-  if (isClosing == true) {
+  if (move_to_max == true) {
     tmc_steps++;
   } else {
     tmc_steps--;
@@ -107,48 +119,88 @@ void setup() {
   driver.rms_current(set_current);
   driver.SGTHRS(set_stall);
   driver.TCOOLTHRS(set_tcools);
+  driver.index_step(true);
 }
 
 
 void loop() {
   // Add your Wi-Fi code here if required. The motor control will be done in the other task and core.
 
-  if (isRunning == true) {
+  // ## STEP 1: Uncomment this line below and obtain the value from the serial monitor.
+  // Multiply this obtained value by 1.2 and set the variable "set_tcools" to this value on line 29
+  // Serial.println(driver.TSTEP());
+  // Now comment the line above
 
-    // ## STEP 1: Uncomment this line below and obtain the value from the serial monitor.
-    // Multiply this obtained value by 1.2 and set the variable "set_tcools" to this value on line 29
-    // Serial.println(driver.TSTEP());
-    // Now comment the line above
+  // ## STEP 2: Uncomment the line below and watch the value change in the serial monitor. This is the SG_RESULT value
+  // Serial.println(driver.SG_RESULT());
+  // If the value is averaging 260, then a SGTHRS value of 260/2 (130) will trigger the stall.
+  // We want a SGTHRS value that's much smaller as to not trigger a stall unintentioally. A value of 80 is ok becuase it means the SG_RESULT must drop to 160 (80x2) before a stall is triggered.
+  // Update the "set_stall" variable on line 28 with your desired value.
 
-    // ## STEP 2: Uncomment the line below and watch the value change in the serial monitor. This is the SG_RESULT value
-    // Serial.println(driver.SG_RESULT());
-    // If the value is averaging 260, then a SGTHRS value of 260/2 (130) will trigger the stall.
-    // We want a SGTHRS value that's much smaller as to not trigger a stall unintentioally. A value of 80 is ok becuase it means the SG_RESULT must drop to 160 (80x2) before a stall is triggered.
-    // Update the "set_stall" variable on line 28 with your desired value.
+  // ## Monitor the position if desired
+  Serial.println(tmc_steps);
 
-    // ## Monitor the position if desired
-    //Serial.println(stepper->getCurrentPosition());
+  // The motor should now stop automatically when a stall occurs, delay for 2 seconds, then spin in the opposite direction.
 
-    // The motor should now stop automatically when a stall occurs, delay for 2 seconds, then spin in the opposite direction.
-  }
 
   // The built in pulse generator cannot accelerate. To accelerate, create a for loop that starts at 0 velocity, and increases it's speed until the MOVE_VELOCITY speed is reached
 
-  for (int i = 0; i < MOVE_VELOCITY; i = i + 100) {
-    driver.VACTUAL(i);
-  }
+  move_to_max = true;
+  tmc_steps = 0;
 
-  driver.VACTUAL(MOVE_VELOCITY);  // We tell the motor to move to a spcific position.
-  isRunning = true;
+  // ## Acceleration
+  // Optional way to slowly accelerate the motor.
+  // for (int i = 0; i < vactual_velocity; i = i + 10) {
+  //   driver.VACTUAL(i);
+  //   delay(20);
+  //   Serial.println(tmc_steps);
+  // }
 
-  if (isRunning() == true) {
-    if (stalled_motor == true) {
+  Serial.println(vactual_velocity);
+  driver.VACTUAL(vactual_velocity);  // We tell the motor to move to a spcific position.
+
+  while (tmc_steps < move_to) {
+
+    // ## Stallgaurd OPTIONAL
+    /*
+  if (stalled_motor == true) {
       driver.VACTUAL(0);
       Serial.println("Stalled");
       stalled_motor = false;  // We'll set the stall flag to false, in case it was triggered easlier.
       delay(2000);            // Delay for testing
-      break;                  // Break from the while loop
+      tmc_steps = move_to;
     }
-    delay(1);  // We need to kill some time while the motor moves
+*/
+    Serial.println(tmc_steps);
+
+    delay(1);
   }
+
+  driver.VACTUAL(0);  // Stop the motor
+  delay(2000);        // delay for fun
+
+  // Turn on opposite direction, back to position 0.
+  move_to_max = false;
+  Serial.println(-vactual_velocity);
+  driver.VACTUAL(-vactual_velocity);  // We tell the motor to move to a spcific position.
+
+  while (tmc_steps > 0) {
+
+    // ## Stallgaurd OPTIONAL
+    /*
+  if (stalled_motor == true) {
+      driver.VACTUAL(0);
+      Serial.println("Stalled");
+      stalled_motor = false;  // We'll set the stall flag to false, in case it was triggered easlier.
+      delay(2000);            // Delay for testing
+      tmc_steps = 0;
+    }
+  */
+    Serial.println(tmc_steps);
+
+    delay(1);
+  }
+
+  driver.VACTUAL(0);  // Stop the motor
+  delay(2000);        // delay for fun
 }
