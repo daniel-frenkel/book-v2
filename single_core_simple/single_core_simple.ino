@@ -21,8 +21,8 @@
 #define DRIVER_ADDRESS 0  // TMC2209 Driver address according to MS1 and MS2
 
 
-int32_t MOVE_VELOCITY = 200;  // Sets the speed the motor will run
-int32_t vactual_velocity = MOVE_VELOCITY / 0.715f;
+uint32_t MOVE_VELOCITY = 200;  // Sets the speed the motor will run
+uint32_t vactual_velocity = MOVE_VELOCITY / 0.715f;
 
 // µstep velocity v[Hz] = VACTUAL[2209] * 0.715Hz
 
@@ -37,7 +37,7 @@ int32_t move_to = move_to_step / 2;
 // Sets the speed in microsteps per second.
 // If for example the the motor_microsteps is set to 16 and your stepper motor has 200 full steps per revolution (Most common type. The motor angle will be 1.8 degrees on the datasheet)
 // It means 200 x 16 = 3200 steps per revolution. To set the speed to rotate one revolution per seconds, we would set the value below to 3200.
-int32_t set_velocity = 200;
+uint32_t set_velocity = 200;
 
 // ## Acceleration
 //  setAcceleration() expects as parameter the change of speed
@@ -51,11 +51,11 @@ int32_t set_velocity = 200;
 // note: no update on stopMove()
 //
 // Returns 0 on success, or -1 on invalid value (<=0)
-int32_t set_current = 300;
+uint32_t set_current = 300;
 
 // IF StallGuard does not work, it's because these two values are not set correctly or your pins are not correct.
-int32_t set_stall = 80;         //Do not set the value too high or the TMC will not detect it. Start low and work your way up.
-int32_t set_tcools = 285;       // Set slightly higher than the max TSTEP value you see
+uint8_t set_stall = 80;         //Do not set the value too high or the TMC will not detect it. Start low and work your way up.
+uint32_t set_tcools = 280;       // Set 1.2 times higher than the max TSTEP value you see
 uint16_t motor_microsteps = 0;  //0
 int32_t tmc_steps = 0;
 
@@ -124,32 +124,13 @@ void setup() {
 
 
 void loop() {
-  // Add your Wi-Fi code here if required. The motor control will be done in the other task and core.
-
-  // ## STEP 1: Uncomment this line below and obtain the value from the serial monitor.
-  // Multiply this obtained value by 1.2 and set the variable "set_tcools" to this value on line 29
-  // Serial.println(driver.TSTEP());
-  // Now comment the line above
-
-  // ## STEP 2: Uncomment the line below and watch the value change in the serial monitor. This is the SG_RESULT value
-  // Serial.println(driver.SG_RESULT());
-  // If the value is averaging 260, then a SGTHRS value of 260/2 (130) will trigger the stall.
-  // We want a SGTHRS value that's much smaller as to not trigger a stall unintentioally. A value of 80 is ok becuase it means the SG_RESULT must drop to 160 (80x2) before a stall is triggered.
-  // Update the "set_stall" variable on line 28 with your desired value.
-
-  // ## Monitor the position if desired
-  Serial.println(tmc_steps);
-
-  // The motor should now stop automatically when a stall occurs, delay for 2 seconds, then spin in the opposite direction.
-
-
-  // The built in pulse generator cannot accelerate. To accelerate, create a for loop that starts at 0 velocity, and increases it's speed until the MOVE_VELOCITY speed is reached
 
   move_to_max = true;
   tmc_steps = 0;
 
   // ## Acceleration
   // Optional way to slowly accelerate the motor.
+  // The built in pulse generator cannot accelerate. To accelerate, create a for loop that starts at 0 velocity, and increases it's speed until the MOVE_VELOCITY speed is reached
   // for (int i = 0; i < vactual_velocity; i = i + 10) {
   //   driver.VACTUAL(i);
   //   delay(20);
@@ -171,7 +152,19 @@ void loop() {
       tmc_steps = move_to;
     }
 */
-    Serial.println(tmc_steps);
+
+    // ## STEP 1: Uncomment this line below and obtain the value from the serial monitor.
+    // Multiply this obtained value by 1.2 and set the variable "set_tcools" to this value on line 29
+    // Serial.println(driver.TSTEP());
+    // Now comment the line above
+
+    // ## STEP 2: Uncomment the line below and watch the value change in the serial monitor. This is the SG_RESULT value
+     Serial.println(driver.SG_RESULT());
+    // If the value is averaging 260, then a SGTHRS value of 260/2 (130) will trigger the stall.
+    // We want a SGTHRS value that's much smaller as to not trigger a stall unintentioally. A value of 80 is ok becuase it means the SG_RESULT must drop to 160 (80x2) before a stall is triggered.
+    // Update the "set_stall" variable on line 28 with your desired value.
+
+    //Serial.println(tmc_steps);
 
     delay(1);
   }
@@ -196,7 +189,7 @@ void loop() {
       tmc_steps = 0;
     }
   */
-    Serial.println(tmc_steps);
+    //Serial.println(tmc_steps);
 
     delay(1);
   }
