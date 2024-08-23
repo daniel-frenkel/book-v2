@@ -19,8 +19,8 @@ Here are two versions of hardware to purchase, depending on how much you want to
 1. [Espressif ESP32-S3 DevkitC](https://www.digikey.com/en/products/detail/espressif-systems/ESP32-S3-DEVKITC-1-N32R8V/15970965)
 2. [Trinamic TMC2209-BOB](https://www.digikey.com/en/products/detail/analog-devices-inc-maxim-integrated/TMC2209-BOB/10490037) or [Trinamic TMC2226-BOB](https://www.digikey.com/en/products/detail/analog-devices-inc-maxim-integrated/TMC2226-BOB/12168608) 
 3. [Lin Engineering Stepper Motor](https://www.linengineering.com/products/stepper-motors/hybrid-stepper-motors)
-4. [Power Supply] (https://amzn.to/3XeCvqU)
-5. [BB830 Breadboard] (https://amzn.to/4dzO5ma)
+4. [Power Supply](https://amzn.to/3XeCvqU)
+5. [BB830 Breadboard](https://amzn.to/4dzO5ma)
 6. Jumper wires
 
 ## Educational
