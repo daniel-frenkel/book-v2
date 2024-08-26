@@ -15,10 +15,10 @@
 // ## STEP PIN SETUP:
 // Change these pins on the ESP32
 #define DIR_PIN 5
-#define STEP_PIN 9
-#define ENABLE_PIN 10
-#define RX_PIN 19
-#define TX_PIN 20
+#define STEP_PIN 15        
+#define ENABLE_PIN 16       
+#define RX_PIN 19          
+#define TX_PIN 20          
 #define STALLGUARD_PIN 21
 
 // ## Position
@@ -108,6 +108,7 @@ void setup() {
   stepper->setSpeedInHz(set_velocity);
   stepper->setAcceleration(set_accel);
 
+  Serial.println("Setup 1");
   // Now set up tasks to run independently.
   xTaskCreatePinnedToCore(
     MotorTask  //Motor Task
@@ -117,6 +118,8 @@ void setup() {
     ,3  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
     ,NULL
     ,0);
+
+    Serial.println("Setup Complete");
 }
 
 void loop() {
@@ -126,7 +129,7 @@ void loop() {
 
     // ## STEP 1: Uncomment this line below and obtain the value from the serial monitor.
     // Multiply this obtained value by 1.2 and set the variable "set_tcools" to this value on line 29
-    // Serial.println(driver.TSTEP());
+     Serial.println(driver.TSTEP());
     // Now comment the line above
 
     // ## STEP 2: Uncomment the line below and watch the value change in the serial monitor. This is the SG_RESULT value

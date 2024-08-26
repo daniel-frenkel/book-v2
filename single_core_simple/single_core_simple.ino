@@ -3,17 +3,22 @@
  2) There is also an issue where the INDEX pin is not outputting the correct number of steps. I've yet to figure out why my logic is wrong here.
  */
 
+// ## WARNING ##
+// ESP32-S3 may require fLash changes
+// Go to Tools-> Flash Mode -> OPI mode
+// Go to Tools-> PSRAM -> OPI mode
+
 #include <TMCStepper.h>
 
 /* STEP PIN SETUP:
 *  Change these pins on the ESP32
 */
 #define DIR_PIN 5
-#define STEP_PIN 10
-#define ENABLE_PIN 9
-#define RX_PIN 19  // Set your RX pin on the ESP32
-#define TX_PIN 22  // Set your TX pin on the ESP32
-#define STALLGUARD_PIN 23
+#define STEP_PIN 15        
+#define ENABLE_PIN 16       
+#define RX_PIN 19          
+#define TX_PIN 20          
+#define STALLGUARD_PIN 21
 
 #define INDEX_PIN 2
 

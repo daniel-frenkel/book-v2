@@ -7,6 +7,11 @@
 // The FastAccelStepper library is BROKEN with version 3.0 of the esp32 core.
 // Open up the board manager and revert to version 2.0.17
 
+// ## WARNING ##
+// ESP32-S3 may require fLash changes
+// Go to Tools-> Flash Mode -> OPI mode
+// Go to Tools-> PSRAM -> OPI mode
+
 // Please always refer to the TMC2209 datasheet found here: https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
 
 // ## TMCStepper Library
@@ -20,11 +25,11 @@
 // ## STEP PIN SETUP:
 // Change these pins on the ESP32
 #define DIR_PIN 5
-#define STEP_PIN 10        //9
-#define ENABLE_PIN 9       //10
-#define RX_PIN 19          //??
-#define TX_PIN 22          //??
-#define STALLGUARD_PIN 23  //??
+#define STEP_PIN 15        
+#define ENABLE_PIN 16       
+#define RX_PIN 19          
+#define TX_PIN 20          
+#define STALLGUARD_PIN 21
 
 enum states {
   BOOTUP,
